@@ -1,34 +1,42 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, Sparkles, RefreshCw } from "lucide-react";
+import { Mail, ArrowRight, Sparkles, RefreshCw, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
+
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+
+type FlowMode = "signup" | "login" | "forgot-password";
+type Step = "otp" | "set-password";
 
 const OTPVerificationPage = () => {
   const [otpInput, setOtpInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [storedOtp, setStoredOtp] = useState("");
+  const [step, setStep] = useState<Step>("otp");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   
-  const email = location.state?.email || "";
-  const password = location.state?.password || "";
-  const fullName = location.state?.fullName || "";
-  const initialOtp = location.state?.otp || "";
+  const email = (location.state?.email as string) || "";
+  const mode = (location.state?.mode as FlowMode) || "signup";
 
   useEffect(() => {
-    if (!email || !password) {
+    if (!email) {
       navigate("/auth?mode=signup");
-      return;
     }
-    setStoredOtp(initialOtp);
-  }, [email, password, navigate, initialOtp]);
+  }, [email, navigate]);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -37,7 +45,7 @@ const OTPVerificationPage = () => {
     }
   }, [countdown]);
 
-  const handleVerify = async () => {
+  const handleVerifyOtp = async () => {
     if (otpInput.length !== 6) {
       toast({
         variant: "destructive",
@@ -47,67 +55,88 @@ const OTPVerificationPage = () => {
       return;
     }
 
-    if (otpInput !== storedOtp) {
-      toast({
-        variant: "destructive",
-        title: "Incorrect code",
-        description: "The code you entered is incorrect. Please try again.",
-      });
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // OTP verified, now create the actual account
-      const { data, error } = await supabase.auth.signUp({
+      // Verify OTP using Supabase's built-in verifyOtp
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            full_name: fullName,
-            email_verified: true,
-          },
-        },
+        token: otpInput,
+        type: "email",
       });
 
       if (error) {
         toast({
           variant: "destructive",
-          title: "Account creation failed",
-          description: error.message,
+          title: "Verification failed",
+          description: error.message.includes("expired") 
+            ? "Code has expired. Please request a new one." 
+            : "Invalid code. Please try again.",
         });
         setIsLoading(false);
         return;
       }
 
       if (data.session) {
+        // For forgot password flow, show set password step
+        if (mode === "forgot-password") {
+          setStep("set-password");
+          setIsLoading(false);
+          return;
+        }
+
+        // For signup/login, user is now authenticated
         toast({
-          title: "Email verified!",
-          description: "Welcome to Skin Sense. Your account is now active.",
+          title: mode === "signup" ? "Welcome to Skin Sense!" : "Welcome back!",
+          description: "You've been logged in successfully.",
         });
         navigate("/");
-      } else if (data.user) {
-        // Auto sign in after signup
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (signInError) {
-          toast({
-            title: "Account created!",
-            description: "Please sign in with your credentials.",
-          });
-          navigate("/auth?mode=login");
-        } else {
-          toast({
-            title: "Welcome to Skin Sense!",
-            description: "Your account is now active.",
-          });
-          navigate("/");
-        }
       }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSetPassword = async () => {
+    const passwordResult = passwordSchema.safeParse(password);
+    if (!passwordResult.success) {
+      setPasswordError(passwordResult.error.errors[0].message);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
+    setPasswordError("");
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password,
+      });
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Failed to set password",
+          description: error.message,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      toast({
+        title: "Password updated!",
+        description: "Your password has been set successfully.",
+      });
+      navigate("/");
     } catch (error) {
       toast({
         variant: "destructive",
@@ -122,21 +151,20 @@ const OTPVerificationPage = () => {
   const handleResend = async () => {
     setIsResending(true);
     try {
-      // Generate new OTP
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      const { error } = await supabase.functions.invoke("send-otp-email", {
-        body: { email, otp: newOtp },
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: mode === "signup",
+        },
       });
 
       if (error) {
         toast({
           variant: "destructive",
           title: "Failed to resend",
-          description: error.message || "Could not send verification code.",
+          description: error.message,
         });
       } else {
-        setStoredOtp(newOtp);
         toast({
           title: "Code resent!",
           description: "Please check your email for the new verification code.",
@@ -153,6 +181,20 @@ const OTPVerificationPage = () => {
     } finally {
       setIsResending(false);
     }
+  };
+
+  const getTitle = () => {
+    if (step === "set-password") return "Set New Password";
+    switch (mode) {
+      case "signup": return "Verify Your Email";
+      case "login": return "Enter Your Code";
+      case "forgot-password": return "Verify Your Email";
+    }
+  };
+
+  const getDescription = () => {
+    if (step === "set-password") return "Create a secure password for your account";
+    return "We've sent a 6-digit code to";
   };
 
   return (
@@ -172,65 +214,136 @@ const OTPVerificationPage = () => {
           </div>
 
           <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-secondary/20 to-secondary/10 flex items-center justify-center">
-            <Mail className="w-8 h-8 text-secondary" />
+            {step === "set-password" ? (
+              <Lock className="w-8 h-8 text-secondary" />
+            ) : (
+              <Mail className="w-8 h-8 text-secondary" />
+            )}
           </div>
 
           <h1 className="font-display text-2xl font-bold text-foreground mb-2">
-            Verify Your Email
+            {getTitle()}
           </h1>
           <p className="text-muted-foreground mb-2 font-body">
-            We've sent a 6-digit code to
+            {getDescription()}
           </p>
-          <p className="text-foreground font-medium mb-8">{email}</p>
+          {step === "otp" && (
+            <p className="text-foreground font-medium mb-8">{email}</p>
+          )}
 
-          <div className="flex justify-center mb-8">
-            <InputOTP
-              value={otpInput}
-              onChange={setOtpInput}
-              maxLength={6}
-            >
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
-              </InputOTPGroup>
-            </InputOTP>
-          </div>
+          {step === "otp" ? (
+            <>
+              <div className="flex justify-center mb-8">
+                <InputOTP
+                  value={otpInput}
+                  onChange={setOtpInput}
+                  maxLength={6}
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
 
-          <Button
-            variant="hero"
-            size="lg"
-            className="w-full mb-4"
-            onClick={handleVerify}
-            disabled={isLoading || otpInput.length !== 6}
-          >
-            {isLoading ? "Verifying..." : (
-              <>
-                Verify Email
-                <ArrowRight className="w-5 h-5" />
-              </>
-            )}
-          </Button>
+              <Button
+                variant="hero"
+                size="lg"
+                className="w-full mb-4"
+                onClick={handleVerifyOtp}
+                disabled={isLoading || otpInput.length !== 6}
+              >
+                {isLoading ? "Verifying..." : (
+                  <>
+                    Verify Code
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </Button>
 
-          <p className="text-sm text-muted-foreground mb-2">
-            Didn't receive the code?
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleResend}
-            disabled={isResending || countdown > 0}
-          >
-            <RefreshCw className={`w-4 h-4 ${isResending ? "animate-spin" : ""}`} />
-            {countdown > 0 ? `Resend in ${countdown}s` : "Resend Code"}
-          </Button>
+              <p className="text-sm text-muted-foreground mb-2">
+                Didn't receive the code?
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResend}
+                disabled={isResending || countdown > 0}
+              >
+                <RefreshCw className={`w-4 h-4 ${isResending ? "animate-spin" : ""}`} />
+                {countdown > 0 ? `Resend in ${countdown}s` : "Resend Code"}
+              </Button>
+            </>
+          ) : (
+            <div className="space-y-4 text-left mt-4">
+              <div>
+                <Label htmlFor="password" className="text-foreground">New Password</Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 pr-10 h-12 rounded-xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 h-12 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {passwordError && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {passwordError}
+                </p>
+              )}
+
+              <Button
+                variant="hero"
+                size="lg"
+                className="w-full mt-4"
+                onClick={handleSetPassword}
+                disabled={isLoading}
+              >
+                {isLoading ? "Setting password..." : (
+                  <>
+                    Set Password
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
 
           <div className="mt-6 pt-6 border-t border-border">
             <button
-              onClick={() => navigate("/auth?mode=signup")}
+              onClick={() => navigate("/auth")}
               className="text-sm text-primary hover:underline"
             >
               Use a different email
