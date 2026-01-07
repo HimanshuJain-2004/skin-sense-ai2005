@@ -66,43 +66,38 @@ const AuthPage = () => {
 
     try {
       if (isSignup) {
-        // For signup, we'll use OTP verification
-        const { error } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-            data: {
-              full_name: formData.name,
-            },
-          },
+        // Generate a 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Send OTP via our edge function
+        const { error: otpError } = await supabase.functions.invoke("send-otp-email", {
+          body: { email: formData.email, otp },
         });
         
-        if (error) {
-          if (error.message.includes("already registered")) {
-            toast({
-              variant: "destructive",
-              title: "Account exists",
-              description: "This email is already registered. Please sign in instead.",
-            });
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Sign up failed",
-              description: error.message,
-            });
-          }
+        if (otpError) {
+          toast({
+            variant: "destructive",
+            title: "Failed to send OTP",
+            description: otpError.message || "Could not send verification code. Please try again.",
+          });
           setIsLoading(false);
           return;
         }
         
         toast({
           title: "Verification code sent!",
-          description: "Please check your email for the verification code.",
+          description: "Please check your email for the 6-digit code.",
         });
         
-        // Navigate to OTP verification page
-        navigate("/verify-email", { state: { email: formData.email } });
+        // Navigate to OTP verification page with OTP and user data
+        navigate("/verify-email", { 
+          state: { 
+            email: formData.email, 
+            otp,
+            password: formData.password,
+            fullName: formData.name,
+          } 
+        });
       } else {
         const { error } = await signIn(formData.email, formData.password);
         

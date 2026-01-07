@@ -8,21 +8,27 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const OTPVerificationPage = () => {
-  const [otp, setOtp] = useState("");
+  const [otpInput, setOtpInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [storedOtp, setStoredOtp] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   
   const email = location.state?.email || "";
+  const password = location.state?.password || "";
+  const fullName = location.state?.fullName || "";
+  const initialOtp = location.state?.otp || "";
 
   useEffect(() => {
-    if (!email) {
+    if (!email || !password) {
       navigate("/auth?mode=signup");
+      return;
     }
-  }, [email, navigate]);
+    setStoredOtp(initialOtp);
+  }, [email, password, navigate, initialOtp]);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -32,7 +38,7 @@ const OTPVerificationPage = () => {
   }, [countdown]);
 
   const handleVerify = async () => {
-    if (otp.length !== 6) {
+    if (otpInput.length !== 6) {
       toast({
         variant: "destructive",
         title: "Invalid OTP",
@@ -41,18 +47,34 @@ const OTPVerificationPage = () => {
       return;
     }
 
+    if (otpInput !== storedOtp) {
+      toast({
+        variant: "destructive",
+        title: "Incorrect code",
+        description: "The code you entered is incorrect. Please try again.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
+      // OTP verified, now create the actual account
+      const { data, error } = await supabase.auth.signUp({
         email,
-        token: otp,
-        type: "signup",
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: fullName,
+            email_verified: true,
+          },
+        },
       });
 
       if (error) {
         toast({
           variant: "destructive",
-          title: "Verification failed",
+          title: "Account creation failed",
           description: error.message,
         });
         setIsLoading(false);
@@ -65,6 +87,26 @@ const OTPVerificationPage = () => {
           description: "Welcome to Skin Sense. Your account is now active.",
         });
         navigate("/");
+      } else if (data.user) {
+        // Auto sign in after signup
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (signInError) {
+          toast({
+            title: "Account created!",
+            description: "Please sign in with your credentials.",
+          });
+          navigate("/auth?mode=login");
+        } else {
+          toast({
+            title: "Welcome to Skin Sense!",
+            description: "Your account is now active.",
+          });
+          navigate("/");
+        }
       }
     } catch (error) {
       toast({
@@ -80,23 +122,27 @@ const OTPVerificationPage = () => {
   const handleResend = async () => {
     setIsResending(true);
     try {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email,
+      // Generate new OTP
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      const { error } = await supabase.functions.invoke("send-otp-email", {
+        body: { email, otp: newOtp },
       });
 
       if (error) {
         toast({
           variant: "destructive",
           title: "Failed to resend",
-          description: error.message,
+          description: error.message || "Could not send verification code.",
         });
       } else {
+        setStoredOtp(newOtp);
         toast({
           title: "Code resent!",
           description: "Please check your email for the new verification code.",
         });
         setCountdown(60);
+        setOtpInput("");
       }
     } catch (error) {
       toast({
@@ -139,8 +185,8 @@ const OTPVerificationPage = () => {
 
           <div className="flex justify-center mb-8">
             <InputOTP
-              value={otp}
-              onChange={setOtp}
+              value={otpInput}
+              onChange={setOtpInput}
               maxLength={6}
             >
               <InputOTPGroup>
@@ -159,7 +205,7 @@ const OTPVerificationPage = () => {
             size="lg"
             className="w-full mb-4"
             onClick={handleVerify}
-            disabled={isLoading || otp.length !== 6}
+            disabled={isLoading || otpInput.length !== 6}
           >
             {isLoading ? "Verifying..." : (
               <>
