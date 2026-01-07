@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -65,7 +66,17 @@ const AuthPage = () => {
 
     try {
       if (isSignup) {
-        const { error } = await signUp(formData.email, formData.password, formData.name);
+        // For signup, we'll use OTP verification
+        const { error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              full_name: formData.name,
+            },
+          },
+        });
         
         if (error) {
           if (error.message.includes("already registered")) {
@@ -86,9 +97,12 @@ const AuthPage = () => {
         }
         
         toast({
-          title: "Account created!",
-          description: "Welcome to Skin Sense. Your account has been created successfully.",
+          title: "Verification code sent!",
+          description: "Please check your email for the verification code.",
         });
+        
+        // Navigate to OTP verification page
+        navigate("/verify-email", { state: { email: formData.email } });
       } else {
         const { error } = await signIn(formData.email, formData.password);
         
@@ -99,6 +113,13 @@ const AuthPage = () => {
               title: "Invalid credentials",
               description: "The email or password you entered is incorrect.",
             });
+          } else if (error.message.includes("Email not confirmed")) {
+            toast({
+              variant: "destructive",
+              title: "Email not verified",
+              description: "Please verify your email before signing in.",
+            });
+            navigate("/verify-email", { state: { email: formData.email } });
           } else {
             toast({
               variant: "destructive",
@@ -114,9 +135,8 @@ const AuthPage = () => {
           title: "Welcome back!",
           description: "You've been logged in successfully.",
         });
+        navigate("/");
       }
-      
-      navigate("/");
     } catch (error) {
       toast({
         variant: "destructive",

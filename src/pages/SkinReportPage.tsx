@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   Lock, 
@@ -15,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { useSubscription } from "@/hooks/useSubscription";
 
 // Mock analysis data
 const mockAnalysis = {
@@ -73,8 +73,9 @@ const mockAnalysis = {
 };
 
 const SkinReportPage = () => {
-  const [isSubscribed] = useState(false);
+  const { hasActiveSubscription, loading } = useSubscription();
   const navigate = useNavigate();
+  const isSubscribed = hasActiveSubscription;
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return "text-secondary";
