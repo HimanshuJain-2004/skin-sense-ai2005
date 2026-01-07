@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, User, ChevronDown, LogOut, CreditCard, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/useAuth";
 
-interface NavbarProps {
-  isLoggedIn?: boolean;
-  user?: { name: string; avatar?: string };
-  onLogout?: () => void;
-}
-
-const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
+const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -36,6 +33,13 @@ const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/");
+  };
+
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
 
   return (
     <motion.nav
@@ -84,18 +88,14 @@ const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
 
           {/* Auth Section */}
           <div className="hidden md:flex items-center gap-4">
-            {isLoggedIn && user ? (
+            {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 px-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                      {user.avatar ? (
-                        <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
-                      ) : (
-                        <User className="w-4 h-4 text-primary-foreground" />
-                      )}
+                      <User className="w-4 h-4 text-primary-foreground" />
                     </div>
-                    <span className="font-medium text-foreground">{user.name}</span>
+                    <span className="font-medium text-foreground">{displayName}</span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -113,7 +113,7 @@ const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onLogout} className="flex items-center gap-2 cursor-pointer text-destructive">
+                  <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4" />
                     Logout
                   </DropdownMenuItem>
@@ -172,7 +172,7 @@ const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
                 </Link>
               ))}
               <div className="pt-4 border-t border-border/50 space-y-3">
-                {isLoggedIn ? (
+                {user ? (
                   <>
                     <Link to="/profile" className="block" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="outline" className="w-full justify-start gap-2">
@@ -180,7 +180,7 @@ const Navbar = ({ isLoggedIn = false, user, onLogout }: NavbarProps) => {
                         Profile
                       </Button>
                     </Link>
-                    <Button variant="destructive" className="w-full" onClick={onLogout}>
+                    <Button variant="destructive" className="w-full" onClick={handleLogout}>
                       <LogOut className="w-4 h-4 mr-2" />
                       Logout
                     </Button>
