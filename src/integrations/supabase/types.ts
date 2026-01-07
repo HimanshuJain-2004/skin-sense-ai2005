@@ -53,6 +53,75 @@ export type Database = {
         }
         Relationships: []
       }
+      skin_analysis_history: {
+        Row: {
+          analyzed_at: string
+          concerns: Json | null
+          created_at: string
+          id: string
+          image_url: string | null
+          overall_score: number | null
+          skin_type: string | null
+          user_id: string
+        }
+        Insert: {
+          analyzed_at?: string
+          concerns?: Json | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          overall_score?: number | null
+          skin_type?: string | null
+          user_id: string
+        }
+        Update: {
+          analyzed_at?: string
+          concerns?: Json | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          overall_score?: number | null
+          skin_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          last_payment_date: string | null
+          plan: Database["public"]["Enums"]["subscription_plan"]
+          started_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_payment_date?: string | null
+          plan?: Database["public"]["Enums"]["subscription_plan"]
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_payment_date?: string | null
+          plan?: Database["public"]["Enums"]["subscription_plan"]
+          started_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -89,6 +158,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      subscription_plan: "free" | "monthly" | "quarterly" | "yearly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -217,6 +287,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      subscription_plan: ["free", "monthly", "quarterly", "yearly"],
     },
   },
 } as const
