@@ -1,18 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Sparkles, Chrome } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Sparkles, Chrome, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address");
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const AuthPage = () => {
   const [searchParams] = useSearchParams();
   const [isSignup, setIsSignup] = useState(searchParams.get("mode") === "signup");
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signUp, signIn, signInWithGoogle } = useAuth();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -20,33 +27,120 @@ const AuthPage = () => {
     password: "",
   });
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+
+  const validateForm = () => {
+    const newErrors: { email?: string; password?: string; name?: string } = {};
+    
+    const emailResult = emailSchema.safeParse(formData.email);
+    if (!emailResult.success) {
+      newErrors.email = emailResult.error.errors[0].message;
+    }
+    
+    const passwordResult = passwordSchema.safeParse(formData.password);
+    if (!passwordResult.success) {
+      newErrors.password = passwordResult.error.errors[0].message;
+    }
+    
+    if (isSignup && !formData.name.trim()) {
+      newErrors.name = "Please enter your name";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) return;
+    
     setIsLoading(true);
+    setErrors({});
 
-    // Simulate API call - will be replaced with real auth
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    toast({
-      title: isSignup ? "Account created!" : "Welcome back!",
-      description: isSignup 
-        ? "Your account has been created successfully." 
-        : "You've been logged in successfully.",
-    });
-
-    setIsLoading(false);
-    navigate("/");
+    try {
+      if (isSignup) {
+        const { error } = await signUp(formData.email, formData.password, formData.name);
+        
+        if (error) {
+          if (error.message.includes("already registered")) {
+            toast({
+              variant: "destructive",
+              title: "Account exists",
+              description: "This email is already registered. Please sign in instead.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Sign up failed",
+              description: error.message,
+            });
+          }
+          setIsLoading(false);
+          return;
+        }
+        
+        toast({
+          title: "Account created!",
+          description: "Welcome to Skin Sense. Your account has been created successfully.",
+        });
+      } else {
+        const { error } = await signIn(formData.email, formData.password);
+        
+        if (error) {
+          if (error.message.includes("Invalid login credentials")) {
+            toast({
+              variant: "destructive",
+              title: "Invalid credentials",
+              description: "The email or password you entered is incorrect.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Sign in failed",
+              description: error.message,
+            });
+          }
+          setIsLoading(false);
+          return;
+        }
+        
+        toast({
+          title: "Welcome back!",
+          description: "You've been logged in successfully.",
+        });
+      }
+      
+      navigate("/");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleAuth = async () => {
     setIsLoading(true);
-    // Simulate Google OAuth - will be replaced with real implementation
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast({
-      title: "Google authentication",
-      description: "Google OAuth will be available once backend is connected.",
-    });
-    setIsLoading(false);
+    
+    const { error } = await signInWithGoogle();
+    
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Google sign in failed",
+        description: "Google OAuth requires configuration. Please use email sign in for now.",
+      });
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -112,10 +206,15 @@ const AuthPage = () => {
                     placeholder="John Doe"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="pl-10 h-12 rounded-xl"
-                    required={isSignup}
+                    className={`pl-10 h-12 rounded-xl ${errors.name ? 'border-destructive' : ''}`}
                   />
                 </div>
+                {errors.name && (
+                  <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.name}
+                  </p>
+                )}
               </div>
             )}
 
@@ -129,10 +228,15 @@ const AuthPage = () => {
                   placeholder="hello@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-10 h-12 rounded-xl"
-                  required
+                  className={`pl-10 h-12 rounded-xl ${errors.email ? 'border-destructive' : ''}`}
                 />
               </div>
+              {errors.email && (
+                <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -145,10 +249,15 @@ const AuthPage = () => {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10 h-12 rounded-xl"
-                  required
+                  className={`pl-10 h-12 rounded-xl ${errors.password ? 'border-destructive' : ''}`}
                 />
               </div>
+              {errors.password && (
+                <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.password}
+                </p>
+              )}
             </div>
 
             <Button
