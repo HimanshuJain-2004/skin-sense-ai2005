@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Sparkles, Chrome, AlertCircle } from "lucide-react";
+import { Mail, ArrowRight, Sparkles, Chrome, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,22 +11,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
-const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+
+type AuthMode = "signup" | "login" | "forgot-password";
 
 const AuthPage = () => {
   const [searchParams] = useSearchParams();
-  const [isSignup, setIsSignup] = useState(searchParams.get("mode") === "signup");
+  const [mode, setMode] = useState<AuthMode>(() => {
+    const urlMode = searchParams.get("mode");
+    if (urlMode === "forgot-password") return "forgot-password";
+    if (urlMode === "login") return "login";
+    return "signup";
+  });
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signUp, signIn, signInWithGoogle } = useAuth();
-
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+  const { user, signInWithGoogle } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
@@ -35,103 +36,88 @@ const AuthPage = () => {
     }
   }, [user, navigate]);
 
-  const validateForm = () => {
-    const newErrors: { email?: string; password?: string; name?: string } = {};
-    
-    const emailResult = emailSchema.safeParse(formData.email);
-    if (!emailResult.success) {
-      newErrors.email = emailResult.error.errors[0].message;
+  const validateEmail = () => {
+    const result = emailSchema.safeParse(email);
+    if (!result.success) {
+      setEmailError(result.error.errors[0].message);
+      return false;
     }
-    
-    const passwordResult = passwordSchema.safeParse(formData.password);
-    if (!passwordResult.success) {
-      newErrors.password = passwordResult.error.errors[0].message;
-    }
-    
-    if (isSignup && !formData.name.trim()) {
-      newErrors.name = "Please enter your name";
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setEmailError("");
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    if (!validateEmail()) return;
     
     setIsLoading(true);
-    setErrors({});
+    setEmailError("");
 
     try {
-      if (isSignup) {
-        // Generate a 6-digit OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        
-        // Send OTP via our edge function
-        const { error: otpError } = await supabase.functions.invoke("send-otp-email", {
-          body: { email: formData.email, otp },
-        });
-        
-        if (otpError) {
+      if (mode === "forgot-password") {
+        // Check if email exists in profiles first
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("email", email)
+          .maybeSingle();
+
+        if (profileError) {
           toast({
             variant: "destructive",
-            title: "Failed to send OTP",
-            description: otpError.message || "Could not send verification code. Please try again.",
+            title: "Error",
+            description: "Could not verify email. Please try again.",
           });
           setIsLoading(false);
           return;
         }
-        
-        toast({
-          title: "Verification code sent!",
-          description: "Please check your email for the 6-digit code.",
-        });
-        
-        // Navigate to OTP verification page with OTP and user data
-        navigate("/verify-email", { 
-          state: { 
-            email: formData.email, 
-            otp,
-            password: formData.password,
-            fullName: formData.name,
-          } 
-        });
-      } else {
-        const { error } = await signIn(formData.email, formData.password);
-        
-        if (error) {
-          if (error.message.includes("Invalid login credentials")) {
-            toast({
-              variant: "destructive",
-              title: "Invalid credentials",
-              description: "The email or password you entered is incorrect.",
-            });
-          } else if (error.message.includes("Email not confirmed")) {
-            toast({
-              variant: "destructive",
-              title: "Email not verified",
-              description: "Please verify your email before signing in.",
-            });
-            navigate("/verify-email", { state: { email: formData.email } });
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Sign in failed",
-              description: error.message,
-            });
-          }
+
+        if (!profile) {
+          setEmailError("Email not registered. Please sign up first.");
           setIsLoading(false);
           return;
         }
-        
-        toast({
-          title: "Welcome back!",
-          description: "You've been logged in successfully.",
-        });
-        navigate("/");
       }
+
+      // Use Supabase's built-in OTP
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: mode === "signup",
+        },
+      });
+
+      if (error) {
+        if (error.message.includes("rate limit")) {
+          toast({
+            variant: "destructive",
+            title: "Too many requests",
+            description: "Please wait a moment before requesting another code.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Failed to send OTP",
+            description: error.message,
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      toast({
+        title: "Verification code sent!",
+        description: "Please check your email for the 6-digit code.",
+      });
+
+      // Navigate to OTP verification page
+      navigate("/verify-email", {
+        state: {
+          email,
+          mode,
+        },
+      });
     } catch (error) {
       toast({
         variant: "destructive",
@@ -158,6 +144,31 @@ const AuthPage = () => {
     }
   };
 
+  const getTitle = () => {
+    switch (mode) {
+      case "signup": return "Create your account";
+      case "login": return "Welcome back";
+      case "forgot-password": return "Reset your password";
+    }
+  };
+
+  const getDescription = () => {
+    switch (mode) {
+      case "signup": return "Start your journey to healthier skin today";
+      case "login": return "Sign in to continue your skincare journey";
+      case "forgot-password": return "We'll send you a code to reset your password";
+    }
+  };
+
+  const getButtonText = () => {
+    if (isLoading) return "Sending code...";
+    switch (mode) {
+      case "signup": return "Get Started";
+      case "login": return "Send Login Code";
+      case "forgot-password": return "Send Reset Code";
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Form */}
@@ -179,60 +190,39 @@ const AuthPage = () => {
           </div>
 
           <h1 className="font-display text-3xl font-bold text-foreground mb-2">
-            {isSignup ? "Create your account" : "Welcome back"}
+            {getTitle()}
           </h1>
           <p className="text-muted-foreground mb-8 font-body">
-            {isSignup 
-              ? "Start your journey to healthier skin today" 
-              : "Sign in to continue your skincare journey"}
+            {getDescription()}
           </p>
 
-          {/* Google Auth */}
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full mb-6"
-            onClick={handleGoogleAuth}
-            disabled={isLoading}
-          >
-            <Chrome className="w-5 h-5" />
-            Continue with Google
-          </Button>
+          {mode !== "forgot-password" && (
+            <>
+              {/* Google Auth */}
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full mb-6"
+                onClick={handleGoogleAuth}
+                disabled={isLoading}
+              >
+                <Chrome className="w-5 h-5" />
+                Continue with Google
+              </Button>
 
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-background px-4 text-muted-foreground">or</span>
-            </div>
-          </div>
+              <div className="relative mb-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-background px-4 text-muted-foreground">or continue with email</span>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignup && (
-              <div>
-                <Label htmlFor="name" className="text-foreground">Full Name</Label>
-                <div className="relative mt-1">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className={`pl-10 h-12 rounded-xl ${errors.name ? 'border-destructive' : ''}`}
-                  />
-                </div>
-                {errors.name && (
-                  <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    {errors.name}
-                  </p>
-                )}
-              </div>
-            )}
-
             <div>
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <div className="relative mt-1">
@@ -241,36 +231,15 @@ const AuthPage = () => {
                   id="email"
                   type="email"
                   placeholder="hello@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={`pl-10 h-12 rounded-xl ${errors.email ? 'border-destructive' : ''}`}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`pl-10 h-12 rounded-xl ${emailError ? 'border-destructive' : ''}`}
                 />
               </div>
-              {errors.email && (
+              {emailError && (
                 <p className="mt-1 text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="w-4 h-4" />
-                  {errors.email}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="password" className="text-foreground">Password</Label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={`pl-10 h-12 rounded-xl ${errors.password ? 'border-destructive' : ''}`}
-                />
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.password}
+                  {emailError}
                 </p>
               )}
             </div>
@@ -282,26 +251,46 @@ const AuthPage = () => {
               className="w-full mt-6"
               disabled={isLoading}
             >
-              {isLoading ? (
-                "Please wait..."
-              ) : (
-                <>
-                  {isSignup ? "Create Account" : "Sign In"}
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
+              {getButtonText()}
+              {!isLoading && <ArrowRight className="w-5 h-5" />}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-muted-foreground font-body">
-            {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
-            <button
-              onClick={() => setIsSignup(!isSignup)}
-              className="text-primary font-medium hover:underline"
-            >
-              {isSignup ? "Sign in" : "Sign up"}
-            </button>
-          </p>
+          <div className="mt-6 text-center space-y-2">
+            {mode === "forgot-password" ? (
+              <p className="text-muted-foreground font-body">
+                Remember your password?{" "}
+                <button
+                  onClick={() => setMode("login")}
+                  className="text-primary font-medium hover:underline"
+                >
+                  Sign in
+                </button>
+              </p>
+            ) : (
+              <>
+                <p className="text-muted-foreground font-body">
+                  {mode === "signup" ? "Already have an account?" : "Don't have an account?"}{" "}
+                  <button
+                    onClick={() => setMode(mode === "signup" ? "login" : "signup")}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    {mode === "signup" ? "Sign in" : "Sign up"}
+                  </button>
+                </p>
+                {mode === "login" && (
+                  <p className="text-muted-foreground font-body">
+                    <button
+                      onClick={() => setMode("forgot-password")}
+                      className="text-primary font-medium hover:underline"
+                    >
+                      Forgot your password?
+                    </button>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </motion.div>
       </div>
 
