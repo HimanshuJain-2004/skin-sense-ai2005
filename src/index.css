@@ -31,7 +31,7 @@
     --muted-foreground: 220 9% 46%; /* #6B7280 Secondary Text */
 
     /* Accent - Pale Clinical Blue #D6E4F0 */
-    --accent: 207 48% 89%;
+    --accent: 215 25% 26.6667%;
     --accent-foreground: 216 79% 21%;
 
     /* Destructive - Medical Red #C94A4A */
@@ -62,9 +62,9 @@
     --gradient-card: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(255,255,255,0.92));
 
     /* Shadows - Navy Blue based */
-    --shadow-sm: 0px 1px 26.75px 0px hsla(0, 0%, 0%, 0.1);
-    --shadow-md: 0px 1px 80.25px 0px hsla(0, 0%, 0%, 0.1);
-    --shadow-lg: 0px 1px 133.75px 0px hsla(0, 0%, 0%, 0.1);
+    --shadow-sm: 0 2px 8px -2px rgba(11, 44, 95, 0.08);
+    --shadow-md: 0 8px 24px -8px rgba(11, 44, 95, 0.12);
+    --shadow-lg: 0 16px 48px -16px rgba(11, 44, 95, 0.15);
     --shadow-glow: 0 0 40px -10px rgba(11, 44, 95, 0.25);
     --shadow-card: 0 4px 20px -4px rgba(11, 44, 95, 0.08);
 
