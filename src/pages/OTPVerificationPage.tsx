@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, Sparkles, RefreshCw, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Mail, ArrowRight, Sparkles, RefreshCw, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,18 +19,21 @@ const OTPVerificationPage = () => {
   const [otpInput, setOtpInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [countdown, setCountdown] = useState(60);
   const [step, setStep] = useState<Step>("otp");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [otpError, setOtpError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const otpRef = useRef<HTMLDivElement>(null);
   
   const email = (location.state?.email as string) || "";
   const mode = (location.state?.mode as FlowMode) || "signup";
+  const initialPassword = (location.state?.password as string) || "";
 
   useEffect(() => {
     if (!email) {
@@ -45,19 +48,25 @@ const OTPVerificationPage = () => {
     }
   }, [countdown]);
 
+  // Auto-focus OTP input
+  useEffect(() => {
+    if (step === "otp") {
+      setTimeout(() => {
+        otpRef.current?.querySelector('input')?.focus();
+      }, 100);
+    }
+  }, [step]);
+
   const handleVerifyOtp = async () => {
     if (otpInput.length !== 6) {
-      toast({
-        variant: "destructive",
-        title: "Invalid OTP",
-        description: "Please enter the complete 6-digit code",
-      });
+      setOtpError("Please enter the complete 6-digit code");
       return;
     }
 
     setIsLoading(true);
+    setOtpError("");
+    
     try {
-      // Verify OTP using Supabase's built-in verifyOtp
       const { data, error } = await supabase.auth.verifyOtp({
         email,
         token: otpInput,
@@ -65,38 +74,32 @@ const OTPVerificationPage = () => {
       });
 
       if (error) {
-        toast({
-          variant: "destructive",
-          title: "Verification failed",
-          description: error.message.includes("expired") 
+        setOtpError(
+          error.message.includes("expired") 
             ? "Code has expired. Please request a new one." 
-            : "Invalid code. Please try again.",
-        });
+            : "Invalid code. Please try again."
+        );
         setIsLoading(false);
         return;
       }
 
       if (data.session) {
-        // For forgot password flow, show set password step
-        if (mode === "forgot-password") {
+        // For forgot password or signup, show set password step
+        if (mode === "forgot-password" || mode === "signup") {
           setStep("set-password");
           setIsLoading(false);
           return;
         }
 
-        // For signup/login, user is now authenticated
+        // For login, user is now authenticated
         toast({
-          title: mode === "signup" ? "Welcome to Skin Sense!" : "Welcome back!",
+          title: "Welcome back!",
           description: "You've been logged in successfully.",
         });
         navigate("/");
       }
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-      });
+      setOtpError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -123,26 +126,20 @@ const OTPVerificationPage = () => {
       });
 
       if (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to set password",
-          description: error.message,
-        });
+        setPasswordError(error.message);
         setIsLoading(false);
         return;
       }
 
       toast({
-        title: "Password updated!",
-        description: "Your password has been set successfully.",
+        title: mode === "signup" ? "Account created!" : "Password updated!",
+        description: mode === "signup" 
+          ? "Welcome to Skin Sense! Your account is ready." 
+          : "Your password has been reset successfully.",
       });
       navigate("/");
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-      });
+      setPasswordError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -150,6 +147,8 @@ const OTPVerificationPage = () => {
 
   const handleResend = async () => {
     setIsResending(true);
+    setOtpError("");
+    
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -184,71 +183,99 @@ const OTPVerificationPage = () => {
   };
 
   const getTitle = () => {
-    if (step === "set-password") return "Set New Password";
+    if (step === "set-password") {
+      return mode === "signup" ? "Set Your Password" : "Create New Password";
+    }
     switch (mode) {
       case "signup": return "Verify Your Email";
-      case "login": return "Enter Your Code";
+      case "login": return "Enter Login Code";
       case "forgot-password": return "Verify Your Email";
     }
   };
 
   const getDescription = () => {
-    if (step === "set-password") return "Create a secure password for your account";
-    return "We've sent a 6-digit code to";
+    if (step === "set-password") {
+      return "Create a secure password to protect your account";
+    }
+    return "We've sent a 6-digit verification code to";
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-br from-rose-light via-background to-teal-light">
+    <div className="min-h-screen flex items-center justify-center p-8 bg-background">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="w-full max-w-md"
       >
-        <div className="glass-card p-8 text-center">
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-card">
           {/* Logo */}
           <div className="flex items-center gap-2 justify-center mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
+            <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
               <Sparkles className="w-6 h-6 text-primary-foreground" />
             </div>
           </div>
 
-          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-secondary/20 to-secondary/10 flex items-center justify-center">
+          {/* Step Indicator */}
+          {mode !== "login" && (
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                step === "otp" ? "bg-primary text-primary-foreground" : "bg-success text-primary-foreground"
+              }`}>
+                {step === "set-password" ? <CheckCircle className="w-5 h-5" /> : "1"}
+              </div>
+              <div className="w-12 h-0.5 bg-border" />
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                step === "set-password" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}>
+                2
+              </div>
+            </div>
+          )}
+
+          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
             {step === "set-password" ? (
-              <Lock className="w-8 h-8 text-secondary" />
+              <Lock className="w-8 h-8 text-primary" />
             ) : (
-              <Mail className="w-8 h-8 text-secondary" />
+              <Mail className="w-8 h-8 text-primary" />
             )}
           </div>
 
-          <h1 className="font-display text-2xl font-bold text-foreground mb-2">
+          <h1 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
             {getTitle()}
           </h1>
-          <p className="text-muted-foreground mb-2 font-body">
+          <p className="text-muted-foreground mb-2 font-body text-center">
             {getDescription()}
           </p>
           {step === "otp" && (
-            <p className="text-foreground font-medium mb-8">{email}</p>
+            <p className="text-foreground font-medium mb-6 text-center">{email}</p>
           )}
 
           {step === "otp" ? (
             <>
-              <div className="flex justify-center mb-8">
+              <div ref={otpRef} className="flex justify-center mb-4">
                 <InputOTP
                   value={otpInput}
-                  onChange={setOtpInput}
+                  onChange={(value) => { setOtpInput(value); setOtpError(""); }}
                   maxLength={6}
                 >
                   <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
+                    <InputOTPSlot index={0} className="w-12 h-12 text-lg" />
+                    <InputOTPSlot index={1} className="w-12 h-12 text-lg" />
+                    <InputOTPSlot index={2} className="w-12 h-12 text-lg" />
+                    <InputOTPSlot index={3} className="w-12 h-12 text-lg" />
+                    <InputOTPSlot index={4} className="w-12 h-12 text-lg" />
+                    <InputOTPSlot index={5} className="w-12 h-12 text-lg" />
                   </InputOTPGroup>
                 </InputOTP>
               </div>
+
+              {otpError && (
+                <p className="text-sm text-destructive flex items-center justify-center gap-1 mb-4">
+                  <AlertCircle className="w-4 h-4" />
+                  {otpError}
+                </p>
+              )}
 
               <Button
                 variant="hero"
@@ -265,31 +292,33 @@ const OTPVerificationPage = () => {
                 )}
               </Button>
 
-              <p className="text-sm text-muted-foreground mb-2">
-                Didn't receive the code?
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResend}
-                disabled={isResending || countdown > 0}
-              >
-                <RefreshCw className={`w-4 h-4 ${isResending ? "animate-spin" : ""}`} />
-                {countdown > 0 ? `Resend in ${countdown}s` : "Resend Code"}
-              </Button>
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Didn't receive the code?
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResend}
+                  disabled={isResending || countdown > 0}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isResending ? "animate-spin" : ""}`} />
+                  {countdown > 0 ? `Resend in ${countdown}s` : "Resend Code"}
+                </Button>
+              </div>
             </>
           ) : (
-            <div className="space-y-4 text-left mt-4">
+            <div className="space-y-4 mt-4">
               <div>
-                <Label htmlFor="password" className="text-foreground">New Password</Label>
+                <Label htmlFor="password" className="text-foreground">Password</Label>
                 <div className="relative mt-1">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="Create a strong password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
                     className="pl-10 pr-10 h-12 rounded-xl"
                   />
                   <button
@@ -309,9 +338,9 @@ const OTPVerificationPage = () => {
                   <Input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="Confirm your password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(""); }}
                     className="pl-10 h-12 rounded-xl"
                   />
                 </div>
@@ -324,6 +353,12 @@ const OTPVerificationPage = () => {
                 </p>
               )}
 
+              {/* Password requirements */}
+              <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 p-3 rounded-lg">
+                <p className="font-medium text-foreground">Password requirements:</p>
+                <p className={password.length >= 6 ? "text-success" : ""}>• At least 6 characters</p>
+              </div>
+
               <Button
                 variant="hero"
                 size="lg"
@@ -333,7 +368,7 @@ const OTPVerificationPage = () => {
               >
                 {isLoading ? "Setting password..." : (
                   <>
-                    Set Password
+                    {mode === "signup" ? "Complete Signup" : "Reset Password"}
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
@@ -341,7 +376,7 @@ const OTPVerificationPage = () => {
             </div>
           )}
 
-          <div className="mt-6 pt-6 border-t border-border">
+          <div className="mt-6 pt-6 border-t border-border text-center">
             <button
               onClick={() => navigate("/auth")}
               className="text-sm text-primary hover:underline"

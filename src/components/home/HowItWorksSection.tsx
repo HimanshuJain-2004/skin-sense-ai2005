@@ -1,36 +1,40 @@
 import { motion } from "framer-motion";
-import { Upload, Cpu, FileText, Sparkles } from "lucide-react";
+import { UserPlus, Upload, BarChart3, CalendarCheck, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 const steps = [
   {
-    icon: Upload,
+    icon: UserPlus,
     step: "01",
-    title: "Upload Your Photo",
-    description: "Take a clear, well-lit selfie or upload an existing photo of your face.",
+    title: "Sign Up Securely",
+    description: "Create your account with email or Google. Your data stays private and protected.",
   },
   {
-    icon: Cpu,
+    icon: Upload,
     step: "02",
-    title: "AI Analysis",
-    description: "Our advanced AI scans your skin for concerns like acne, wrinkles, and pigmentation.",
+    title: "Upload a Clear Photo",
+    description: "Take a well-lit selfie with your face centered. No makeup or filters needed.",
   },
   {
-    icon: FileText,
+    icon: BarChart3,
     step: "03",
-    title: "Get Your Report",
-    description: "Receive a comprehensive skin health report with detailed insights and scores.",
+    title: "Get 15-Parameter Analysis",
+    description: "Our AI analyzes acne, pigmentation, hydration, wrinkles, and more in seconds.",
   },
   {
-    icon: Sparkles,
+    icon: CalendarCheck,
     step: "04",
-    title: "Personalized Care",
-    description: "Get customized skincare recommendations and remedies tailored to your needs.",
+    title: "Follow Your Routine",
+    description: "Get personalized AM/PM skincare routines tailored to your skin's unique needs.",
   },
 ];
 
 const HowItWorksSection = () => {
+  const navigate = useNavigate();
+
   return (
-    <section className="section-padding bg-gradient-to-b from-rose-light/30 to-background">
+    <section id="how-it-works" className="section-padding bg-secondary/30">
       <div className="container mx-auto px-4 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -40,20 +44,20 @@ const HowItWorksSection = () => {
           className="text-center mb-16"
         >
           <span className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-            Simple Process
+            Simple 4-Step Process
           </span>
           <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-            How It Works
+            How Skin Sense Works
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-body">
             Get your complete skin analysis in just four simple steps. 
-            No appointments, no waiting rooms.
+            No appointments, no waiting rooms, no expensive consultations.
           </p>
         </motion.div>
 
         <div className="relative">
           {/* Connection Line */}
-          <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20 -translate-y-1/2" />
+          <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-primary/20 -translate-y-1/2" />
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {steps.map((step, index) => (
@@ -65,22 +69,22 @@ const HowItWorksSection = () => {
                 transition={{ duration: 0.6, delay: index * 0.15 }}
                 className="relative"
               >
-                <div className="glass-card p-8 text-center hover-lift h-full">
+                <div className="bg-card border border-border rounded-2xl p-8 text-center hover:shadow-card transition-shadow h-full">
                   {/* Step Number */}
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <span className="inline-block px-4 py-1 rounded-full bg-gradient-to-r from-primary to-accent text-primary-foreground text-sm font-bold">
-                      {step.step}
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                      Step {step.step}
                     </span>
                   </div>
                   
-                  <div className="w-16 h-16 mx-auto mt-4 mb-6 rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
+                  <div className="w-16 h-16 mx-auto mt-4 mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <step.icon className="w-8 h-8 text-primary" />
                   </div>
                   
                   <h3 className="font-display text-xl font-semibold text-foreground mb-3">
                     {step.title}
                   </h3>
-                  <p className="text-muted-foreground font-body">
+                  <p className="text-muted-foreground font-body text-sm leading-relaxed">
                     {step.description}
                   </p>
                 </div>
@@ -88,6 +92,28 @@ const HowItWorksSection = () => {
             ))}
           </div>
         </div>
+
+        {/* CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="text-center mt-12"
+        >
+          <Button
+            variant="hero"
+            size="lg"
+            onClick={() => navigate("/auth?mode=signup")}
+            className="group"
+          >
+            Get Started Free
+            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          </Button>
+          <p className="text-sm text-muted-foreground mt-3">
+            No credit card required • Free skin analysis included
+          </p>
+        </motion.div>
       </div>
     </section>
   );
