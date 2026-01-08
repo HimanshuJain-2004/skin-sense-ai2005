@@ -51,15 +51,19 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        rose: {
-          light: "hsl(var(--rose-light))",
-          medium: "hsl(var(--rose-medium))",
+        // SkinSense Brand Colors
+        navy: {
+          DEFAULT: "hsl(var(--primary))",
+          hover: "hsl(var(--navy-hover))",
+          active: "hsl(var(--navy-active))",
         },
-        teal: {
-          light: "hsl(var(--teal-light))",
-          medium: "hsl(var(--teal-medium))",
+        sand: {
+          DEFAULT: "hsl(var(--secondary))",
         },
+        beige: "hsl(var(--beige))",
+        sage: "hsl(var(--sage))",
         gold: "hsl(var(--gold))",
+        success: "hsl(var(--success))",
         cream: "hsl(var(--cream))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
