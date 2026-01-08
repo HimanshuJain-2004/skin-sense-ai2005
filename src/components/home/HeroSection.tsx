@@ -133,7 +133,7 @@ const HeroSection = () => {
               {[1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
-                  className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-medium to-primary border-2 border-background"
+                  className="w-10 h-10 rounded-full bg-primary border-2 border-background"
                 />
               ))}
             </div>
