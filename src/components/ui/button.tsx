@@ -9,15 +9,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-sm hover:shadow-md",
+        default: "bg-primary text-primary-foreground hover:bg-navy-hover active:bg-navy-active rounded-xl shadow-sm hover:shadow-md",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl",
         outline: "border-2 border-primary/30 bg-transparent text-foreground hover:bg-primary/5 hover:border-primary rounded-xl",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-xl",
-        ghost: "hover:bg-accent/50 hover:text-accent-foreground rounded-xl",
+        ghost: "hover:bg-muted hover:text-foreground rounded-xl",
         link: "text-primary underline-offset-4 hover:underline",
-        hero: "bg-gradient-to-r from-primary to-accent text-primary-foreground hover:shadow-glow hover:scale-[1.02] rounded-full font-semibold",
-        "hero-outline": "border-2 border-primary/30 bg-card/50 backdrop-blur-sm text-foreground hover:bg-primary/10 hover:border-primary rounded-full font-medium",
-        premium: "bg-gradient-to-r from-gold to-accent text-foreground hover:shadow-lg rounded-xl font-semibold",
+        hero: "bg-primary text-primary-foreground hover:bg-navy-hover active:bg-navy-active hover:shadow-md hover:scale-[1.02] rounded-full font-semibold",
+        "hero-outline": "border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground rounded-full font-medium",
+        premium: "bg-gold text-foreground hover:bg-gold/90 hover:shadow-lg rounded-xl font-semibold",
         teal: "bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:shadow-md rounded-xl",
       },
       size: {

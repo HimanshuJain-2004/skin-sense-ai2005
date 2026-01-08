@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, User, ChevronDown, LogOut, CreditCard, Sparkles } from "lucide-react";
+import { Menu, X, User, ChevronDown, LogOut, CreditCard, Sparkles, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,12 +12,47 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 
+const useTheme = () => {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      return document.documentElement.classList.contains("dark");
+    }
+    return false;
+  });
+
+  const toggleTheme = () => {
+    const newIsDark = !isDark;
+    setIsDark(newIsDark);
+    if (newIsDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    } else if (savedTheme === "light") {
+      document.documentElement.classList.remove("dark");
+      setIsDark(false);
+    }
+  }, []);
+
+  return { isDark, toggleTheme };
+};
+
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -55,7 +90,7 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="font-display text-2xl font-semibold text-foreground group-hover:text-primary transition-colors">
@@ -88,18 +123,33 @@ const Navbar = () => {
 
           {/* Auth Section */}
           <div className="hidden md:flex items-center gap-4">
+            {/* Dark Mode Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="rounded-full"
+              aria-label="Toggle theme"
+            >
+              {isDark ? (
+                <Sun className="w-5 h-5 text-foreground" />
+              ) : (
+                <Moon className="w-5 h-5 text-foreground" />
+              )}
+            </Button>
+
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 px-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
                       <User className="w-4 h-4 text-primary-foreground" />
                     </div>
                     <span className="font-medium text-foreground">{displayName}</span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 bg-card/95 backdrop-blur-xl border-border/50">
+                <DropdownMenuContent align="end" className="w-48 bg-card border-border">
                   <DropdownMenuItem asChild>
                     <Link to="/profile" className="flex items-center gap-2 cursor-pointer">
                       <User className="w-4 h-4" />
@@ -127,7 +177,7 @@ const Navbar = () => {
                   </Button>
                 </Link>
                 <Link to="/auth?mode=signup">
-                  <Button variant="hero" size="default">
+                  <Button size="default" className="rounded-full">
                     Get Started
                   </Button>
                 </Link>
@@ -171,7 +221,24 @@ const Navbar = () => {
                   {link.name}
                 </Link>
               ))}
-              <div className="pt-4 border-t border-border/50 space-y-3">
+              {/* Dark Mode Toggle - Mobile */}
+              <div className="flex items-center justify-between py-3">
+                <span className="font-medium text-foreground">Dark Mode</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="rounded-full"
+                >
+                  {isDark ? (
+                    <Sun className="w-5 h-5" />
+                  ) : (
+                    <Moon className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+
+              <div className="pt-4 border-t border-border space-y-3">
                 {user ? (
                   <>
                     <Link to="/profile" className="block" onClick={() => setIsMobileMenuOpen(false)}>
@@ -193,7 +260,7 @@ const Navbar = () => {
                       </Button>
                     </Link>
                     <Link to="/auth?mode=signup" onClick={() => setIsMobileMenuOpen(false)}>
-                      <Button variant="hero" className="w-full">
+                      <Button className="w-full rounded-full">
                         Get Started
                       </Button>
                     </Link>
