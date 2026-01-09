@@ -37,11 +37,14 @@ serve(async (req) => {
       );
     }
 
-    const { plan_id, amount }: OrderRequest = await req.json();
+    const body = await req.json();
+const plan_id = body.plan_id;
+const amount = Number(body.amount);
 
-    if (!plan_id || !amount) {
+
+    if (!plan_id || !Number.isInteger(amount) || amount <= 0) {
       return new Response(
-        JSON.stringify({ error: "Missing plan_id or amount" }),
+        JSON.stringify({ error: "Invalid plan_id or amount" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -57,42 +60,44 @@ serve(async (req) => {
     }
 
     // Create Razorpay order
-    const orderData = {
-      amount: amount * 100, // Razorpay expects amount in paise
-      currency: "INR",
-     receipt: `rcpt_${Date.now()}`
+   const orderData = {
+  amount: amount * 100,
+  currency: "INR",
+  receipt: `rcpt_${Date.now()}`,
+  notes: {
+    user_id: user.id,
+    plan_id: plan_id,
+    user_email: user.email,
+  },
+};
 
-      notes: {
-        user_id: user.id,
-        plan_id: plan_id,
-        user_email: user.email,
-      },
-    };
+const response = await fetch("https://api.razorpay.com/v1/orders", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)}`,
+  },
+  body: JSON.stringify(orderData),
+});
 
-    const response = await fetch("https://api.razorpay.com/v1/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)}`,
-      },
-      body: JSON.stringify(orderData),
-    });
-
-    if (!response.ok) {
+if (!response.ok) {
   const errorData = await response.text();
   console.error("Razorpay error:", errorData);
 
   return new Response(
-    JSON.stringify({ error: errorData }),
+    JSON.stringify({
+      error: "Razorpay order creation failed",
+      razorpay: errorData,
+    }),
     {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     }
   );
 }
-}
 
-    const order = await response.json();
+const order = await response.json();
+
 
     return new Response(
       JSON.stringify({
