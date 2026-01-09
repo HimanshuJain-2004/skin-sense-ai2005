@@ -88,14 +88,23 @@ serve(async (req) => {
       },
     };
 
-    const response = await fetch("https://api.razorpay.com/v1/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)}`,
-      },
-      body: JSON.stringify(orderData),
-    });
+   const auth = `${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`;
+const encodedAuth = btoa(
+  new TextEncoder().encode(auth).reduce(
+    (data, byte) => data + String.fromCharCode(byte),
+    ""
+  )
+);
+
+const response = await fetch("https://api.razorpay.com/v1/orders", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${encodedAuth}`,
+  },
+  body: JSON.stringify(orderData),
+});
+
 
     if (!response.ok) {
       const errorData = await response.text();
