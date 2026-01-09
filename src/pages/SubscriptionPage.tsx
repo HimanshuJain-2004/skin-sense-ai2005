@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, Sparkles, Crown, CreditCard, Shield } from "lucide-react";
+import { Check, Sparkles, Crown, CreditCard, Shield, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 const plans = [
   {
@@ -59,20 +68,147 @@ const plans = [
 const SubscriptionPage = () => {
   const [selectedPlan, setSelectedPlan] = useState("quarterly");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    script.onerror = () => {
+      toast({
+        title: "Error",
+        description: "Failed to load payment gateway. Please refresh the page.",
+        variant: "destructive",
+      });
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   const handlePayment = async () => {
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please sign in to subscribe to a plan.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    if (!razorpayLoaded) {
+      toast({
+        title: "Please Wait",
+        description: "Payment gateway is loading...",
+      });
+      return;
+    }
+
     setIsProcessing(true);
-    
-    // Simulate Razorpay checkout - will be replaced with real implementation
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Payment Integration",
-      description: "Razorpay checkout will be available once backend is connected.",
-    });
-    
-    setIsProcessing(false);
+
+    try {
+      const selectedPlanData = plans.find((p) => p.id === selectedPlan);
+      if (!selectedPlanData) throw new Error("Invalid plan");
+
+      // Get session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No session found");
+      }
+
+      // Create order
+      const orderResponse = await supabase.functions.invoke("create-razorpay-order", {
+        body: {
+          plan_id: selectedPlan,
+          amount: selectedPlanData.price,
+        },
+      });
+
+      if (orderResponse.error) {
+        throw new Error(orderResponse.error.message || "Failed to create order");
+      }
+
+      const { order_id, amount, currency, key_id } = orderResponse.data;
+
+      // Open Razorpay checkout
+      const options = {
+        key: key_id,
+        amount: amount,
+        currency: currency,
+        name: "Skin Sense",
+        description: `${selectedPlanData.name} Subscription`,
+        order_id: order_id,
+        prefill: {
+          email: user.email,
+        },
+        theme: {
+          color: "#0B2C5F",
+        },
+        handler: async (response: any) => {
+          try {
+            // Verify payment
+            const verifyResponse = await supabase.functions.invoke("verify-razorpay-payment", {
+              body: {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                plan_id: selectedPlan,
+              },
+            });
+
+            if (verifyResponse.error) {
+              throw new Error(verifyResponse.error.message || "Payment verification failed");
+            }
+
+            toast({
+              title: "Payment Successful! 🎉",
+              description: `You're now subscribed to the ${selectedPlanData.name} plan.`,
+            });
+
+            navigate("/report");
+          } catch (error: any) {
+            console.error("Verification error:", error);
+            toast({
+              title: "Payment Verification Failed",
+              description: error.message || "Please contact support if amount was deducted.",
+              variant: "destructive",
+            });
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on("payment.failed", (response: any) => {
+        toast({
+          title: "Payment Failed",
+          description: response.error?.description || "Something went wrong",
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+      });
+      razorpay.open();
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to initiate payment",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+    }
   };
 
   const selectedPlanData = plans.find((p) => p.id === selectedPlan);
@@ -115,7 +251,7 @@ const SubscriptionPage = () => {
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
-                    <span className="inline-flex items-center gap-1 px-4 py-1 rounded-full bg-gradient-to-r from-primary to-accent text-primary-foreground text-sm font-bold shadow-glow">
+                    <span className="inline-flex items-center gap-1 px-4 py-1 rounded-full bg-primary text-primary-foreground text-sm font-bold">
                       <Sparkles className="w-3 h-3" />
                       Most Popular
                     </span>
@@ -125,7 +261,7 @@ const SubscriptionPage = () => {
                 <div
                   className={`glass-card p-8 h-full flex flex-col transition-all duration-300 ${
                     selectedPlan === plan.id
-                      ? "border-2 border-primary shadow-glow ring-2 ring-primary/20"
+                      ? "border-2 border-primary ring-2 ring-primary/20"
                       : plan.popular
                         ? "border-2 border-primary/30"
                         : plan.best
@@ -172,7 +308,7 @@ const SubscriptionPage = () => {
                     {plan.features.map((feature, i) => (
                       <li key={i} className="flex items-start gap-3">
                         <div className="w-5 h-5 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Check className="w-3 h-3 text-secondary" />
+                          <Check className="w-3 h-3 text-primary" />
                         </div>
                         <span className="text-sm text-foreground font-body">
                           {feature}
@@ -213,10 +349,18 @@ const SubscriptionPage = () => {
                 size="xl"
                 className="w-full mb-4"
                 onClick={handlePayment}
-                disabled={isProcessing}
+                disabled={isProcessing || !razorpayLoaded}
               >
                 {isProcessing ? (
-                  "Processing..."
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing...
+                  </>
+                ) : !razorpayLoaded ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Loading...
+                  </>
                 ) : (
                   <>
                     <CreditCard className="w-5 h-5" />
