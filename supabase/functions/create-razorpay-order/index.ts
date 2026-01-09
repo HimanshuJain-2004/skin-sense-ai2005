@@ -60,7 +60,8 @@ serve(async (req) => {
     const orderData = {
       amount: amount * 100, // Razorpay expects amount in paise
       currency: "INR",
-      receipt: `order_${user.id}_${Date.now()}`,
+     receipt: `rcpt_${Date.now()}`
+
       notes: {
         user_id: user.id,
         plan_id: plan_id,
@@ -78,13 +79,18 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error("Razorpay error:", errorData);
-      return new Response(
-        JSON.stringify({ error: "Failed to create order" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+  const errorData = await response.text();
+  console.error("Razorpay error:", errorData);
+
+  return new Response(
+    JSON.stringify({ error: errorData }),
+    {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     }
+  );
+}
+}
 
     const order = await response.json();
 
