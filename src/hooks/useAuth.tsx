@@ -6,9 +6,6 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signInWithOtp: (email: string, shouldCreateUser?: boolean) => Promise<{ error: Error | null }>;
-  verifyOtp: (email: string, token: string) => Promise<{ data: any; error: Error | null }>;
-  updatePassword: (password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -40,32 +37,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithOtp = async (email: string, shouldCreateUser: boolean = true) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser,
-      },
-    });
-    
-    return { error: error as Error | null };
-  };
-
-  const verifyOtp = async (email: string, token: string) => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email",
-    });
-    
-    return { data, error: error as Error | null };
-  };
-
-  const updatePassword = async (password: string) => {
-    const { error } = await supabase.auth.updateUser({ password });
-    return { error: error as Error | null };
-  };
-
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -82,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithOtp, verifyOtp, updatePassword, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

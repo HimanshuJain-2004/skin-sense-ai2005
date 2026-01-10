@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
-import OTPVerificationPage from "./pages/OTPVerificationPage";
 import ProfilePage from "./pages/ProfilePage";
 import SkinReportPage from "./pages/SkinReportPage";
 import SubscriptionPage from "./pages/SubscriptionPage";
@@ -25,7 +24,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/verify-email" element={<OTPVerificationPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/report" element={<SkinReportPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />
