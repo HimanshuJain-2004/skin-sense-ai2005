@@ -33,14 +33,23 @@ const AuthPage = () => {
   const [generalError, setGeneralError] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signInWithGoogle } = useAuth();
+  const { user, loading, signInWithGoogle } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      navigate("/");
+    if (!loading && user) {
+      navigate("/", { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   const validateEmail = () => {
     const result = emailSchema.safeParse(email);
