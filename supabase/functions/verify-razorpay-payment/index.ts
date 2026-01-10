@@ -92,11 +92,14 @@ serve(async (req) => {
     const expectedSignature = await createHmacSha256(RAZORPAY_KEY_SECRET, body);
 
     if (expectedSignature !== razorpay_signature) {
+      console.error("Signature mismatch. Expected:", expectedSignature, "Got:", razorpay_signature);
       return new Response(
         JSON.stringify({ error: "Invalid payment signature" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("Payment signature verified successfully");
 
     // Payment verified, update subscription using service role
     const supabaseAdmin = createClient(
@@ -106,18 +109,42 @@ serve(async (req) => {
 
     const { months, plan } = getPlanDuration(plan_id);
     const now = new Date();
-    const expiresAt = new Date(now.setMonth(now.getMonth() + months));
+    const expiresAt = new Date(now.getTime() + months * 30 * 24 * 60 * 60 * 1000);
 
-    // Update subscription
-    const { error: updateError } = await supabaseAdmin
+    // Check if subscription exists
+    const { data: existingSub } = await supabaseAdmin
       .from("subscriptions")
-      .update({
-        plan: plan,
-        status: "active",
-        expires_at: expiresAt.toISOString(),
-        last_payment_date: new Date().toISOString(),
-      })
-      .eq("user_id", user.id);
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    let updateError;
+    
+    if (existingSub) {
+      // Update existing subscription
+      const { error } = await supabaseAdmin
+        .from("subscriptions")
+        .update({
+          plan: plan,
+          status: "active",
+          expires_at: expiresAt.toISOString(),
+          last_payment_date: new Date().toISOString(),
+        })
+        .eq("user_id", user.id);
+      updateError = error;
+    } else {
+      // Create new subscription
+      const { error } = await supabaseAdmin
+        .from("subscriptions")
+        .insert({
+          user_id: user.id,
+          plan: plan,
+          status: "active",
+          expires_at: expiresAt.toISOString(),
+          last_payment_date: new Date().toISOString(),
+        });
+      updateError = error;
+    }
 
     if (updateError) {
       console.error("Failed to update subscription:", updateError);
@@ -126,6 +153,8 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("Subscription updated successfully for user:", user.id);
 
     return new Response(
       JSON.stringify({ success: true, message: "Payment verified and subscription updated" }),
