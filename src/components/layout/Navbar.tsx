@@ -51,7 +51,7 @@ const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -138,7 +138,9 @@ const Navbar = () => {
               )}
             </Button>
 
-            {user ? (
+            {loading ? (
+              <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+            ) : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 px-3">
@@ -239,7 +241,11 @@ const Navbar = () => {
               </div>
 
               <div className="pt-4 border-t border-border space-y-3">
-                {user ? (
+                {loading ? (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                ) : user ? (
                   <>
                     <Link to="/profile" className="block" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="outline" className="w-full justify-start gap-2">
@@ -247,7 +253,14 @@ const Navbar = () => {
                         Profile
                       </Button>
                     </Link>
-                    <Button variant="destructive" className="w-full" onClick={handleLogout}>
+                    <Button 
+                      variant="destructive" 
+                      className="w-full" 
+                      onClick={() => {
+                        handleLogout();
+                        setIsMobileMenuOpen(false);
+                      }}
+                    >
                       <LogOut className="w-4 h-4 mr-2" />
                       Logout
                     </Button>
