@@ -121,7 +121,13 @@ const SubscriptionPage = () => {
       // Get session for auth
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        throw new Error("No session found");
+        toast({
+          title: "Session Expired",
+          description: "Please log in again to continue.",
+          variant: "destructive",
+        });
+        navigate("/auth");
+        return;
       }
 
       // Create order
@@ -132,11 +138,21 @@ const SubscriptionPage = () => {
         },
       });
 
+      console.log("Order response:", orderResponse);
+
       if (orderResponse.error) {
         throw new Error(orderResponse.error.message || "Failed to create order");
       }
 
+      if (!orderResponse.data || orderResponse.data.error) {
+        throw new Error(orderResponse.data?.error || "Failed to create order");
+      }
+
       const { order_id, amount, currency, key_id } = orderResponse.data;
+
+      if (!order_id || !key_id) {
+        throw new Error("Invalid order response from server");
+      }
 
       // Open Razorpay checkout
       const options = {
