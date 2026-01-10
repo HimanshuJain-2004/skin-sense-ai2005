@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, Sparkles, Chrome, AlertCircle, Lock, Eye, EyeOff, User } from "lucide-react";
+import { Mail, ArrowRight, Sparkles, Chrome, AlertCircle, Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,7 @@ const AuthPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -58,69 +59,52 @@ const AuthPage = () => {
       setPasswordError(result.error.errors[0].message);
       return false;
     }
+    if (mode === "signup" && password !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return false;
+    }
     setPasswordError("");
     return true;
   };
 
-  const handleEmailPasswordLogin = async () => {
-    // Try password login first
+  const handleLogin = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      // If invalid credentials, switch to OTP fallback
       if (error.message.includes("Invalid login credentials")) {
-        return { success: false, shouldFallbackToOtp: true };
+        return { success: false, error: "Invalid email or password" };
       }
-      return { success: false, error: error.message, shouldFallbackToOtp: false };
+      return { success: false, error: error.message };
     }
 
     return { success: true, data };
   };
 
   const handleSignup = async () => {
-    // For signup, use OTP flow (no password initially, set after OTP verification)
-    const { error } = await supabase.auth.signInWithOtp({
+    const { data, error } = await supabase.auth.signUp({
       email,
+      password,
       options: {
-        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/`,
       },
     });
 
     if (error) {
-      if (error.message.includes("rate limit")) {
-        return { success: false, error: "Too many requests. Please wait a moment." };
+      if (error.message.includes("already registered")) {
+        return { success: false, error: "This email is already registered. Please sign in instead." };
       }
       return { success: false, error: error.message };
     }
 
-    return { success: true };
+    return { success: true, data };
   };
 
   const handleForgotPassword = async () => {
-    // Check if email exists in profiles first
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (profileError) {
-      return { success: false, error: "Could not verify email. Please try again." };
-    }
-
-    if (!profile) {
-      return { success: false, error: "Email not registered. Please sign up first." };
-    }
-
-    // Send OTP
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-      },
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?mode=login`,
     });
 
     if (error) {
@@ -135,14 +119,13 @@ const AuthPage = () => {
     setGeneralError("");
     
     if (!validateEmail()) return;
-    if (mode !== "forgot-password" && mode !== "signup" && !validatePassword()) return;
+    if (!validatePassword()) return;
     
     setIsLoading(true);
 
     try {
       if (mode === "login") {
-        // Try email + password login first
-        const result = await handleEmailPasswordLogin();
+        const result = await handleLogin();
         
         if (result.success) {
           toast({
@@ -153,75 +136,37 @@ const AuthPage = () => {
           return;
         }
 
-        if (result.shouldFallbackToOtp) {
-          // Password incorrect or doesn't exist, send OTP
-          const { error } = await supabase.auth.signInWithOtp({
-            email,
-            options: {
-              shouldCreateUser: false,
-            },
-          });
-
-          if (error) {
-            if (error.message.includes("Signups not allowed")) {
-              setGeneralError("Account not found. Please sign up first.");
-            } else {
-              setGeneralError(error.message);
-            }
-            setIsLoading(false);
-            return;
-          }
-
-          toast({
-            title: "Verification code sent!",
-            description: "Password incorrect or not set. We've sent you a login code.",
-          });
-
-          navigate("/verify-email", {
-            state: { email, mode: "login" },
-          });
-          return;
-        }
-
         if (result.error) {
           setGeneralError(result.error);
-          setIsLoading(false);
-          return;
         }
       } else if (mode === "signup") {
         const result = await handleSignup();
         
         if (!result.success) {
-          setGeneralError(result.error || "Failed to send verification code");
+          setGeneralError(result.error || "Failed to create account");
           setIsLoading(false);
           return;
         }
 
         toast({
-          title: "Verification code sent!",
-          description: "Please check your email for the 6-digit code.",
+          title: "Account created!",
+          description: "Welcome to Skin Sense! You're now logged in.",
         });
-
-        navigate("/verify-email", {
-          state: { email, mode: "signup", password },
-        });
+        navigate("/");
       } else if (mode === "forgot-password") {
         const result = await handleForgotPassword();
         
         if (!result.success) {
-          setEmailError(result.error || "Failed to send reset code");
+          setEmailError(result.error || "Failed to send reset email");
           setIsLoading(false);
           return;
         }
 
         toast({
-          title: "Reset code sent!",
-          description: "Please check your email for the 6-digit code.",
+          title: "Reset email sent!",
+          description: "Please check your email for the password reset link.",
         });
-
-        navigate("/verify-email", {
-          state: { email, mode: "forgot-password" },
-        });
+        setMode("login");
       }
     } catch (error) {
       setGeneralError("An unexpected error occurred. Please try again.");
@@ -257,7 +202,7 @@ const AuthPage = () => {
     switch (mode) {
       case "signup": return "Start your journey to healthier skin";
       case "login": return "Sign in to continue your skincare journey";
-      case "forgot-password": return "We'll send you a code to reset your password";
+      case "forgot-password": return "We'll send you a link to reset your password";
     }
   };
 
@@ -265,12 +210,12 @@ const AuthPage = () => {
     if (isLoading) {
       if (mode === "login") return "Signing in...";
       if (mode === "signup") return "Creating account...";
-      return "Sending code...";
+      return "Sending link...";
     }
     switch (mode) {
       case "signup": return "Create Account";
       case "login": return "Sign In";
-      case "forgot-password": return "Send Reset Code";
+      case "forgot-password": return "Send Reset Link";
     }
   };
 
@@ -298,7 +243,7 @@ const AuthPage = () => {
           {mode !== "forgot-password" && (
             <div className="flex gap-2 mb-8 p-1 bg-muted rounded-xl">
               <button
-                onClick={() => { setMode("signup"); setGeneralError(""); }}
+                onClick={() => { setMode("signup"); setGeneralError(""); setPasswordError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
                   mode === "signup" 
                     ? "bg-card text-foreground shadow-sm" 
@@ -308,7 +253,7 @@ const AuthPage = () => {
                 Sign Up
               </button>
               <button
-                onClick={() => { setMode("login"); setGeneralError(""); }}
+                onClick={() => { setMode("login"); setGeneralError(""); setPasswordError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
                   mode === "login" 
                     ? "bg-card text-foreground shadow-sm" 
@@ -383,8 +328,8 @@ const AuthPage = () => {
               )}
             </div>
 
-            {/* Password field - only for login mode */}
-            {mode === "login" && (
+            {/* Password field */}
+            {mode !== "forgot-password" && (
               <div>
                 <Label htmlFor="password" className="text-foreground">Password</Label>
                 <div className="relative mt-1">
@@ -405,23 +350,36 @@ const AuthPage = () => {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                {passwordError && (
-                  <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    {passwordError}
+                {mode === "signup" && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Password must be at least 6 characters
                   </p>
                 )}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Don't remember your password? We'll send you a login code.
-                </p>
               </div>
             )}
 
-            {/* For signup, we use OTP */}
+            {/* Confirm Password field - only for signup */}
             {mode === "signup" && (
-              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                <User className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                We'll send a 6-digit verification code to your email
+              <div>
+                <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(""); }}
+                    className={`pl-10 h-12 rounded-xl ${passwordError ? 'border-destructive' : ''}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {passwordError && (
+              <p className="text-sm text-destructive flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {passwordError}
               </p>
             )}
 
@@ -499,8 +457,8 @@ const AuthPage = () => {
               <div className="text-xs text-sand/60">Skin Parameters</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-sand">99%</div>
-              <div className="text-xs text-sand/60">Accuracy</div>
+              <div className="text-2xl font-bold text-sand">4.9</div>
+              <div className="text-xs text-sand/60">User Rating</div>
             </div>
           </div>
         </motion.div>
